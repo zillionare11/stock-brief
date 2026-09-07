@@ -249,7 +249,7 @@ const STOCK_COLORS = ['#4a6cf7','#27ae60','#f39c12','#e74c3c','#9b59b6','#1abc9c
 // ===== JSONP Helper =====
 var _jsonpCounter = 0;
 function jsonp(url, cbParam, timeout) {
-  timeout = timeout || 8000;
+  timeout = timeout || 6000;
   cbParam = cbParam || 'callback';
   return new Promise(function(resolve) {
     var cbName = '__jsonp_' + (++_jsonpCounter) + '_' + Date.now();
@@ -261,7 +261,7 @@ function jsonp(url, cbParam, timeout) {
     var s = document.createElement('script');
     s.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + cbParam + '=' + cbName;
     function cleanup() {
-      delete window[cbName];
+      try { delete window[cbName]; } catch(e) { window[cbName] = null; }
       if (s.parentNode) s.parentNode.removeChild(s);
     }
     s.onerror = function() {
@@ -273,6 +273,14 @@ function jsonp(url, cbParam, timeout) {
       if (done) return; done = true;
       cleanup(); resolve(null);
     }, timeout);
+  });
+}
+function withTimeout(promise, ms, fallback) {
+  return new Promise(function(resolve) {
+    var done = false;
+    promise.then(function(v) { if (!done) { done = true; resolve(v); } })
+    .catch(function() { if (!done) { done = true; resolve(fallback); } });
+    setTimeout(function() { if (!done) { done = true; resolve(fallback); } }, ms);
   });
 }
 
@@ -460,10 +468,28 @@ function parseQuote(str) {
 }
 async function fetchKline(market, code, days) {
   days = days||30;
-  var url = 'https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param='+market+code+',day,,,'+days+',qfq';
-  var data = await jsonp(url, 'callback');
-  if (data) return parseKline(data, market, code);
-  return [];
+  var varName = 'kline_'+market+code+'_'+Date.now();
+  var url = 'https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param='+market+code+',day,,,'+days+',qfq&_var='+varName;
+  return new Promise(function(resolve) {
+    var s = document.createElement('script');
+    var done = false;
+    function finish(val) {
+      if (done) return; done = true;
+      if (s.parentNode) s.parentNode.removeChild(s);
+      try { delete window[varName]; } catch(e) { window[varName] = null; }
+      resolve(val);
+    }
+    s.onload = function() {
+      var d = null;
+      try { d = window[varName]; } catch(e) {}
+      if (d) finish(parseKline(d, market, code));
+      else finish([]);
+    };
+    s.onerror = function() { finish([]); };
+    s.src = url;
+    document.head.appendChild(s);
+    setTimeout(function() { finish([]); }, 6000);
+  });
 }
 function parseKline(data, market, code) {
   var key = market+code;
@@ -471,18 +497,32 @@ function parseKline(data, market, code) {
   var kl = sd.qfqday||sd.day||[];
   return kl.map(function(k){return{date:k[0],open:parseFloat(k[1])||0,close:parseFloat(k[2])||0,high:parseFloat(k[3])||0,low:parseFloat(k[4])||0,volume:parseInt(k[5])||0};});
 }
-async function fetchFundFlow(market, code) {
+async function fetchFundFlow(market, code, klines) {
   var secid = (market==='sh'?'1.':'0.')+code;
   var url = 'https://push2.eastmoney.com/api/qt/stock/fflow/daykline/get?lmt=0&klt=101&secid='+secid+'&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65&ut=b2884a393a59ad64002292a3e90d46a5';
-  var data = await jsonp(url, 'cb');
-  if (!data||!data.data||!data.data.klines) return null;
-  var lines = data.data.klines.slice(-30);
-  var flows = lines.map(function(line){
-    var p=line.split(',');
-    return{date:p[0],main:parseFloat(p[1])/10000};
-  });
-  var n = flows.length;
-  return {today:flows[n-1]?flows[n-1].main:0, day5:flows.slice(-5).reduce(function(s,f){return s+f.main;},0), day10:flows.slice(-10).reduce(function(s,f){return s+f.main;},0), day20:flows.slice(-20).reduce(function(s,f){return s+f.main;},0)};
+  var data = await withTimeout(jsonp(url, 'cb', 5000), 5500, null);
+  if (data && data.data && data.data.klines && data.data.klines.length > 0) {
+    var lines = data.data.klines.slice(-30);
+    var flows = lines.map(function(line){
+      var p=line.split(',');
+      return{date:p[0],main:parseFloat(p[1])/10000};
+    });
+    var n = flows.length;
+    return {today:flows[n-1]?flows[n-1].main:0, day5:flows.slice(-5).reduce(function(s,f){return s+f.main;},0), day10:flows.slice(-10).reduce(function(s,f){return s+f.main;},0), day20:flows.slice(-20).reduce(function(s,f){return s+f.main;},0)};
+  }
+  // Fallback: estimate from K-line data (price change * volume)
+  if (klines && klines.length > 0) {
+    var est = [];
+    for (var i = 0; i < klines.length; i++) {
+      var k = klines[i];
+      var pchg = k.close - k.open;
+      var main = pchg * (k.volume / 100) * 0.3 / 10000;
+      est.push({date:k.date, main:main});
+    }
+    var n2 = est.length;
+    return {today:est[n2-1]?est[n2-1].main:0, day5:est.slice(-5).reduce(function(s,f){return s+f.main;},0), day10:est.slice(-10).reduce(function(s,f){return s+f.main;},0), day20:est.slice(-20).reduce(function(s,f){return s+f.main;},0)};
+  }
+  return null;
 }
 
 // ===== Tech Analysis =====
@@ -600,7 +640,7 @@ function renderFlow(sd) {
   if (sd.length===0){document.getElementById('flowContent').innerHTML='<div class="loading-overlay">请添加股票</div>';return;}
   var has=sd.some(function(s){return s.flow;});
   if (!has){document.getElementById('flowContent').innerHTML='<div class="loading-overlay">资金流向数据获取中...</div>';return;}
-  document.getElementById('flowContent').innerHTML='<div class="flow-chart">'+renderFlowSVG(sd)+'</div><p class="note">单位：万元。红柱=主力净流入，绿柱=主力净流出。数据来源：新浪财经。</p>';
+  document.getElementById('flowContent').innerHTML='<div class="flow-chart">'+renderFlowSVG(sd)+'</div><p class="note">单位：万元。红柱=主力净流入，绿柱=主力净流出。数据来源：东方财富（部分为估算值）。</p>';
 }
 function renderForecast(sd) {
   if (sd.length===0){document.getElementById('forecastContent').innerHTML='<div class="loading-overlay">请添加股票</div>';return;}
@@ -636,16 +676,14 @@ async function refreshAll() {
   document.getElementById('forecastContent').innerHTML='<div class="loading-overlay">数据加载中...</div>';
   document.getElementById('summaryContent').innerHTML='<div class="loading-overlay">数据加载中...</div>';
   var results=await Promise.all(stocks.map(async function(stock){
-    var arr=await Promise.all([
-      fetchQuote(stock.market,stock.code),
-      fetchKline(stock.market,stock.code,30),
-      fetchFundFlow(stock.market,stock.code)
-    ]);
-    var q=parseQuote(arr[0]);
-    var kl=arr[1]||[];
-    var fl=arr[2];
-    var tc=computeTech(kl);
-    return Object.assign({},stock,{quote:q,klines:kl,flow:fl,tech:tc});
+    var qp = fetchQuote(stock.market, stock.code);
+    var kp = fetchKline(stock.market, stock.code, 30);
+    var kl = await kp;
+    var qs = await qp;
+    var fl = await fetchFundFlow(stock.market, stock.code, kl);
+    var q=parseQuote(qs);
+    var tc=computeTech(kl||[]);
+    return Object.assign({},stock,{quote:q,klines:kl||[],flow:fl,tech:tc});
   }));
   renderSummaryBox(results);renderOverview(results);renderFlow(results);renderForecast(results);renderSummary(results);
   initTouchDrag();initFadeIn();
