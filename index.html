@@ -146,6 +146,36 @@
     .kline-chart{height:80px;}
     .flow-chart{height:240px;}
   }
+  .pred-card{border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px 18px;margin-bottom:14px;transition:all .25s;}
+  .pred-card:hover{box-shadow:var(--shadow-hover);}
+  .pred-card h3{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+  .pred-card h3 .code{font-size:12px;color:var(--text3);font-weight:400;}
+  .pred-grid{display:grid;grid-template-columns:1fr;gap:8px;}
+  .pred-row{display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .pred-row:last-child{border-bottom:none;}
+  .pred-label{min-width:70px;color:var(--text2);font-weight:600;flex-shrink:0;}
+  .pred-val{color:var(--text);flex:1;line-height:1.6;}
+  .pred-val.red{color:var(--red);}
+  .pred-val.green{color:var(--green);}
+  .rating-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:700;}
+  .rating-weak{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;}
+  .rating-neutral{background:#fefce8;color:#ca8a04;border:1px solid #fef08a;}
+  .rating-strong{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;}
+  [data-theme="dark"] .rating-weak{background:#3a1212;color:#ff6b6b;border-color:#5a1818;}
+  [data-theme="dark"] .rating-neutral{background:#3a3010;color:#fbbf24;border-color:#5a4818;}
+  [data-theme="dark"] .rating-strong{background:#0f2818;color:#4ade80;border-color:#1a4818;}
+  .rating-score{font-size:11px;color:var(--text3);margin-left:4px;}
+  .summary-card{border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:12px;}
+  .summary-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .summary-card-head h3{font-size:15px;font-weight:700;}
+  .summary-card-body{display:grid;grid-template-columns:1fr;gap:6px;font-size:13px;}
+  .summary-card-body .row{display:flex;gap:6px;align-items:flex-start;padding:4px 0;}
+  .summary-card-body .row .label{min-width:70px;color:var(--text2);font-weight:600;flex-shrink:0;}
+  .summary-card-body .row .val{flex:1;color:var(--text);}
+  @media(max-width:640px){
+    .pred-card{padding:12px 14px;}
+    .pred-label{min-width:60px;font-size:12px;}
+  }
 </style>
 </head>
 <body>
@@ -155,7 +185,8 @@
     <span class="nav-brand">看看</span>
     <a href="#overview" class="active">行情</a>
     <a href="#flow">资金</a>
-    <a href="#forecast">预测</a>
+    <a href="#forecast">技术</a>
+    <a href="#prediction">预测</a>
     <a href="#summary">评级</a>
     <a href="#gold">黄金</a>
     <button class="theme-toggle" onclick="toggleTheme()" aria-label="切换主题">🌙</button>
@@ -196,13 +227,18 @@
   <div id="forecastContent"><div class="loading-overlay">数据加载中...</div></div>
 </div>
 
+<div class="section fade-in" id="prediction">
+  <h2><span class="num">4</span>未来2日走势预测</h2>
+  <div id="predictionContent"><div class="loading-overlay">数据加载中...</div></div>
+</div>
+
 <div class="section fade-in" id="summary">
-  <h2><span class="num">4</span>综合注意事项</h2>
+  <h2><span class="num">5</span>综合注意事项</h2>
   <div id="summaryContent"><div class="loading-overlay">数据加载中...</div></div>
 </div>
 
 <div class="section fade-in" id="gold">
-  <h2><span class="num">5</span>黄金行情</h2>
+  <h2><span class="num">6</span>黄金行情</h2>
   <div class="gold-hero">
     <div class="gold-hero-card">
       <div class="gh-icon">🥇</div>
@@ -647,26 +683,110 @@ function renderForecast(sd) {
   var rows=sd.map(function(s){var t=s.tech||{};return '<tr><td class="bold">'+s.name+'</td><td>'+(t.ma5?t.ma5.toFixed(2):'-')+'</td><td>'+(t.ma10?t.ma10.toFixed(2):'-')+'</td><td>'+(t.ma20?t.ma20.toFixed(2):'-')+'</td><td>'+(t.kdj_k?t.kdj_k.toFixed(2):'-')+'</td><td>'+(t.kdj_d?t.kdj_d.toFixed(2):'-')+'</td><td class="'+ud((t.kdj_j||50)-50)+'">'+(t.kdj_j?t.kdj_j.toFixed(2):'-')+'</td><td class="'+ud(t.macd||0)+'">'+(t.macd!==undefined?t.macd.toFixed(3):'-')+'</td></tr>';}).join('');
   document.getElementById('forecastContent').innerHTML='<div class="table-wrap"><table><tr><th>标的</th><th>MA5</th><th>MA10</th><th>MA20</th><th>KDJ-K</th><th>KDJ-D</th><th>KDJ-J</th><th>MACD</th></tr>'+rows+'</table></div><p class="note">技术指标为前端自动计算，仅供参考。</p>';
 }
+function renderPrediction(sd) {
+  if (sd.length===0){document.getElementById('predictionContent').innerHTML='<div class="loading-overlay">请添加股票</div>';return;}
+  var has=sd.some(function(s){return s.tech&&s.tech.ma20;});
+  if (!has){document.getElementById('predictionContent').innerHTML='<div class="loading-overlay">数据加载中...</div>';return;}
+  var html=sd.map(function(s){
+    var q=s.quote||{},t=s.tech||{},f=s.flow||{};
+    if (!q.price) return '<div class="pred-card"><h3>'+s.name+'</h3><div class="pred-val">数据获取中...</div></div>';
+    var curP=q.price;
+    var ma5=t.ma5||0, ma10=t.ma10||0, ma20=t.ma20||0;
+    var macd=t.macd||0;
+    var kdjJ=t.kdj_j||50, kdjK=t.kdj_k||50, kdjD=t.kdj_d||50;
+    // Trend: bearish if MA5<MA10<MA20
+    var trendBull = ma5>ma10 && ma10>ma20;
+    var trendBear = ma5<ma10 && ma10<ma20;
+    var trendText = trendBull?'多头排列':(trendBear?'空头排列':'均线纠缠');
+    var trendClass = trendBull?'green':(trendBear?'red':'');
+    // Support/Resistance
+    var support = (ma20>0 && ma20<curP) ? ma20 : (q.low>0 ? q.low : curP*0.95);
+    var resistance = (q.high>curP) ? q.high : (ma20>curP ? ma20 : curP*1.05);
+    // Capital
+    var flowToday = f.today||0;
+    var flow20 = f.day20||0;
+    // Prediction text
+    var pred = '';
+    if (trendBear && macd<0) {
+      pred = '弱势震荡，均线空头压制，反弹缺量，跌破支撑继续走弱';
+      if (kdjJ<20) pred += '；但KDJ超卖，注意短线反弹';
+    } else if (trendBull && macd>0) {
+      pred = '多头趋势，量价配合，有望继续上攻';
+      if (kdjJ>80) pred += '；但KDJ超买，注意短线回调';
+    } else if (macd<0) {
+      pred = '震荡偏弱，MACD绿柱延续，观望为主';
+    } else {
+      pred = '震荡整理，方向不明，关注突破方向';
+    }
+    // Watch points
+    var watch = '关注MACD柱状方向变化、KDJ金叉/死叉确认';
+    if (t.ma5 && t.ma10) watch += '、MA5/MA10交叉信号';
+    if (flow20>0) watch += '、资金持续流入确认';
+    else if (flow20<0) watch += '、资金流出是否放缓';
+    var flow20Txt = flow20>=0 ? '+'+Math.round(flow20)+'万' : Math.round(flow20)+'万';
+    var flowTodayTxt = flowToday>=0 ? '+'+Math.round(flowToday)+'万' : Math.round(flowToday)+'万';
+    return '<div class="pred-card">'+
+      '<h3>'+(q.name||s.name)+' <span class="code">'+q.code+'.'+(s.market==='sh'?'SH':'SZ')+'</span></h3>'+
+      '<div class="pred-grid">'+
+        '<div class="pred-row"><span class="pred-label">技术面</span><span class="pred-val">现价 '+curP.toFixed(2)+'，MA5 '+(ma5?ma5.toFixed(2):'-')+'/MA10 '+(ma10?ma10.toFixed(2):'-')+'/MA20 '+(ma20?ma20.toFixed(2):'-')+'（<span class="'+trendClass+'">'+trendText+'</span>）；MACD柱 '+(macd?macd.toFixed(3):'-')+'，KDJ J='+(kdjJ?kdjJ.toFixed(1):'-')+'</span></div>'+
+        '<div class="pred-row"><span class="pred-label">支撑/阻力</span><span class="pred-val">下方支撑 <strong>'+support.toFixed(2)+'</strong>（近期低点）→ 上方阻力 <strong>'+resistance.toFixed(2)+'</strong>（近期高点）</span></div>'+
+        '<div class="pred-row"><span class="pred-label">资金面</span><span class="pred-val">主力净流入 '+flowTodayTxt+'（当日），20日累计 '+flow20Txt+'</span></div>'+
+        '<div class="pred-row"><span class="pred-label">预判</span><span class="pred-val">'+pred+'</span></div>'+
+        '<div class="pred-row"><span class="pred-label">观察点</span><span class="pred-val">'+watch+'</span></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  document.getElementById('predictionContent').innerHTML=html+'<p class="note">预测基于技术指标自动生成，仅供参考，不构成投资建议。</p>';
+}
 function renderSummary(sd) {
   if (sd.length===0){document.getElementById('summaryContent').innerHTML='<div class="loading-overlay">请添加股票</div>';return;}
-  var rows=sd.map(function(s){
+  var has=sd.some(function(s){return s.quote;});
+  if (!has){document.getElementById('summaryContent').innerHTML='<div class="loading-overlay">数据加载中...</div>';return;}
+  var html=sd.map(function(s){
     var q=s.quote||{},f=s.flow||{},t=s.tech||{};
-    var curP=q.price||0, ma20=t.ma20||0, hi=q.high||0, lo=q.low||0;
-    // Support: below current price - use lower of MA20 or recent low
-    var support = (ma20>0 && ma20<curP) ? ma20 : (lo>0 ? lo : curP*0.95);
-    // Resistance: above current price - use higher of today's high or MA20(if above current)
-    var resistance = (hi>curP) ? hi : (ma20>curP ? ma20 : curP*1.05);
-    // Buy price: 2% below support, but never above current price
+    if (!q.price) return '<div class="summary-card"><h3>'+s.name+'</h3><div class="pred-val">数据获取中...</div></div>';
+    var curP=q.price, ma20=t.ma20||0;
+    var support = (ma20>0 && ma20<curP) ? ma20 : (q.low>0 ? q.low : curP*0.95);
+    var resistance = (q.high>curP) ? q.high : (ma20>curP ? ma20 : curP*1.05);
     var buyP = support * 0.98;
     if (buyP >= curP) buyP = curP * 0.95;
-    // Sell price: 2% above resistance, but never below current price
     var sellP = resistance * 1.02;
     if (sellP <= curP) sellP = curP * 1.05;
-    var buyPct = curP>0 ? ((buyP-curP)/curP*100) : 0;
-    var sellPct = curP>0 ? ((sellP-curP)/curP*100) : 0;
-    return '<tr><td class="bold">'+s.name+'</td><td>'+(q.pe?q.pe.toFixed(2):'-')+'</td><td>'+(q.pb?q.pb.toFixed(2):'-')+'</td><td class="'+ud(f.today||0)+'">'+sg(f.today||0)+Math.round(f.today||0)+'万</td><td><span class="down" style="font-weight:700">'+(buyP?buyP.toFixed(2):'-')+'</span><br><span style="font-size:11px;color:var(--text3)">'+(buyPct?buyPct.toFixed(1)+'%':'')+'</span></td><td><span class="up" style="font-weight:700">'+(sellP?sellP.toFixed(2):'-')+'</span><br><span style="font-size:11px;color:var(--text3)">'+(sellPct?'+'+sellPct.toFixed(1)+'%':'')+'</span></td><td>支撑 '+support.toFixed(2)+' / 阻力 '+resistance.toFixed(2)+'</td></tr>';
+    var buyPct = ((buyP-curP)/curP*100).toFixed(1);
+    var sellPct = ((sellP-curP)/curP*100).toFixed(1);
+    // Rating: 0-4 score based on technicals + capital
+    var score = 0;
+    if (f.today>0) score++;
+    if (f.day5>0) score++;
+    if (f.day20>0) score++;
+    if ((t.macd||0)>0) score++;
+    var rating, ratingClass;
+    if (score<=1) { rating='偏弱'; ratingClass='rating-weak'; }
+    else if (score<=3) { rating='中性'; ratingClass='rating-neutral'; }
+    else { rating='偏强'; ratingClass='rating-strong'; }
+    // Core highlights
+    var highlights = '现价 '+curP.toFixed(2)+'，MA20 '+(ma20?ma20.toFixed(2):'-');
+    if (ma20>0 && curP<ma20) highlights += '（破位）';
+    else if (ma20>0 && curP>ma20) highlights += '（上方）';
+    // Core risks
+    var risks = 'MACD柱 '+(t.macd!==undefined?t.macd.toFixed(3):'-');
+    if (t.ma5 && t.ma10 && t.ma5<t.ma10) risks += '，MA5/MA10空头';
+    if (f.day20<0) risks += '，20日资金净流出';
+    else if (f.day20===0) risks += '，资金面不明';
+    var flowToday = f.today||0;
+    return '<div class="summary-card">'+
+      '<div class="summary-card-head"><h3>'+(q.name||s.name)+' <span class="code" style="font-size:12px;color:var(--text3);font-weight:400">'+q.code+'.'+(s.market==='sh'?'SH':'SZ')+'</span></h3><span class="rating-badge '+ratingClass+'">'+rating+' <span class="rating-score">'+score+'/4</span></span></div>'+
+      '<div class="summary-card-body">'+
+        '<div class="row"><span class="label">核心看点</span><span class="val">'+highlights+'</span></div>'+
+        '<div class="row"><span class="label">核心风险</span><span class="val">'+risks+'</span></div>'+
+        '<div class="row"><span class="label">资金面</span><span class="val">主力今日 '+(flowToday>=0?'+':'')+Math.round(flowToday)+'万，20日累计 '+(f.day20>=0?'+':'')+Math.round(f.day20||0)+'万</span></div>'+
+        '<div class="row"><span class="label">建议买入</span><span class="val"><span class="down" style="font-weight:700">'+buyP.toFixed(2)+'</span> <span style="font-size:11px;color:var(--text3)">'+buyPct+'%</span></span></div>'+
+        '<div class="row"><span class="label">建议卖出</span><span class="val"><span class="up" style="font-weight:700">'+sellP.toFixed(2)+'</span> <span style="font-size:11px;color:var(--text3)">+'+sellPct+'%</span></span></div>'+
+        '<div class="row"><span class="label">关注点位</span><span class="val">支撑 '+support.toFixed(2)+' / 阻力 '+resistance.toFixed(2)+'</span></div>'+
+      '</div>'+
+    '</div>';
   }).join('');
-  document.getElementById('summaryContent').innerHTML='<div class="table-wrap"><table><tr><th>标的</th><th>PE</th><th>PB</th><th>当日主力</th><th>建议买入</th><th>建议卖出</th><th>关注点位</th></tr>'+rows+'</table></div><p class="note">支撑取MA20或近期低点，阻力取近期高点。买入=支撑下浮2%，卖出=阻力上浮2%。仅供参考，不构成投资建议。</p>';
+  document.getElementById('summaryContent').innerHTML=html+'<p class="note">评级=资金面/技术面综合评分（0-4分）。支撑取MA20或近期低点，阻力取近期高点。买入=支撑下浮2%，卖出=阻力上浮2%。仅供参考，不构成投资建议。</p>';
 }
 
 // ===== Main =====
@@ -693,7 +813,7 @@ async function refreshAll() {
     var tc=computeTech(kl||[]);
     return Object.assign({},stock,{quote:q,klines:kl||[],flow:fl,tech:tc});
   }));
-  renderSummaryBox(results);renderOverview(results);renderFlow(results);renderForecast(results);renderSummary(results);
+  renderSummaryBox(results);renderOverview(results);renderFlow(results);renderForecast(results);renderPrediction(results);renderSummary(results);
   initTouchDrag();initFadeIn();
   _refreshing=false;
 }
